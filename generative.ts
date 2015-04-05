@@ -35,7 +35,7 @@ class GenerativeSim {
 		// Create and attach renderer
 		this.renderer = new THREE.WebGLRenderer();
 		this.renderer.setSize( width, height );
-		this.renderer.setClearColor( 0x222222 );
+		this.renderer.setClearColor( 0xffffff );
 		containingElement.appendChild( this.renderer.domElement );
 
 		// Bootstrap animation loop
@@ -69,23 +69,52 @@ class TriangleSim extends GenerativeSim {
 	protected velocityMin = 5;
 	protected velocityMax = 30;
 
-	protected positions = new Float32Array( this.numParticles * 3 ); // 3 floats per position (X, Y, Z)
-	protected velocities = new Float32Array( this.numParticles * 2 ); // 2 floats per velocity (X, Y)
+	protected numParticles : number;
+	protected maxNumTris : number;
+	protected maxNumVerts : number;
+
+	protected positions : Float32Array;
+	protected velocities : Float32Array;
+
+	protected indexBuffer : Uint16Array;
+	protected vertexBuffer : Float32Array; //ArrayBuffer; // <-- For interleaved vertex format?
+	protected primCentroidBuffer : Float32Array;
 
 	protected geometry : THREE.BufferGeometry;
 	protected positionAttribute : THREE.BufferAttribute;
+	protected primCentroidAttribute : THREE.BufferAttribute;
 	protected indexAttribute : THREE.BufferAttribute;
-	protected indexBuffer : Uint16Array;
 	protected material : THREE.Material;
 	protected mesh : THREE.Mesh;
+	protected pointCloudMaterial : THREE.PointCloudMaterial;
+	protected pointCloud : THREE.PointCloud;
 
-	constructor( protected numParticles : number = 1000, containingElement: HTMLElement = document.body ) {
+	constructor( numParticles : number, containingElement : HTMLElement = document.body ) {
 		super( containingElement );
 
-		this.camera = new THREE.OrthographicCamera( 0, this.containerWidth, 0, this.containerHeight );
+		this.numParticles = numParticles;
+		this.camera = new THREE.OrthographicCamera( 0, this.containerWidth, 0, this.containerHeight, this.nearClip, this.farClip );
 
-		this.indexBuffer = new Uint16Array( 3 * (this.numParticles * 2 - 4) );
+		// Upper bound on faces in triangulation, per http://math.stackexchange.com/a/745166/127337
+		this.maxNumTris = this.numParticles * 2 - 4;
+		this.maxNumVerts = this.maxNumTris * 3; // Need to duplicate vertices to emulate per-primitive attributes
 
+		// Create canonical arrays
+		this.positions = new Float32Array( this.numParticles * 3 ); // 3 floats per position (X, Y, Z)
+		this.velocities = new Float32Array( this.numParticles * 2 ); // 2 floats per velocity (X, Y)
+
+		// Create index buffer
+		this.indexBuffer = new Uint16Array( this.maxNumTris * 3 );
+
+		for ( var i = 0; i < this.indexBuffer.length; ++i ) {
+			this.indexBuffer[i] = i;
+		}
+
+		// Create vertex buffers
+		this.vertexBuffer = new Float32Array( this.maxNumVerts * 3 );
+		this.primCentroidBuffer = new Float32Array( this.maxNumVerts * 2 );
+
+		// Initialize particles' position and velocity
 		for ( var i = 0; i < this.numParticles; ++i ) {
 			this.positions[i*3 + 0] = Math.random() * this.containerWidth;
 			this.positions[i*3 + 1] = Math.random() * this.containerHeight;
@@ -96,16 +125,38 @@ class TriangleSim extends GenerativeSim {
 		}
 
 		this.geometry = new THREE.BufferGeometry();
-		this.geometry.dynamic = true;
-		this.geometry.addAttribute( 'position', this.positionAttribute = new THREE.BufferAttribute( this.positions, 3 ) );
+		this.geometry.addAttribute( 'position', this.positionAttribute = new THREE.DynamicBufferAttribute( this.vertexBuffer, 3 ) );
+		this.geometry.addAttribute( 'primCentroid', this.primCentroidAttribute = new THREE.DynamicBufferAttribute( this.primCentroidBuffer, 2 ) );
 		this.geometry.addAttribute( 'index', this.indexAttribute = new THREE.BufferAttribute( this.indexBuffer, 1 ) );
-		this.geometry.computeBoundingSphere();
 
-		this.material = new THREE.MeshBasicMaterial( { color: 0xff0000, side: THREE.DoubleSide, wireframe: true } );
+		this.material = new THREE.ShaderMaterial( {
+			attributes: {
+				primCentroid: { type: 'v2', value: null }
+			},
+			uniforms: {
+				viewportSize: { type: 'v2', value: new THREE.Vector2( this.containerWidth, this.containerHeight ) }
+			},
+			vertexShader: document.getElementById( 'tri_vs' ).textContent,
+			fragmentShader: document.getElementById( 'tri_fs' ).textContent,
+			side: THREE.DoubleSide
+			//,wireframe: true
+		} );
+
 		this.mesh = new THREE.Mesh( this.geometry, this.material );
+		this.mesh.frustumCulled = false;
 		this.scene.add( this.mesh );
 
-		this.camera.position.z = 1000;
+		////////////////////////////////////////
+
+		this.pointCloudMaterial = new THREE.PointCloudMaterial( {
+			color: 0x000000,
+			size: 50.0
+		} );
+		this.pointCloud = new THREE.PointCloud( this.geometry, this.pointCloudMaterial );
+		this.pointCloud.frustumCulled = false;
+		this.scene.add( this.pointCloud );
+
+		this.camera.position.z = this.farClip * 0.5;
 	}
 
 	protected update( dtMs : number ) {
@@ -116,7 +167,6 @@ class TriangleSim extends GenerativeSim {
 			this.positions[i*3 + 0] += this.velocities[i*2 + 0] * dtSec;
 			this.positions[i*3 + 1] += this.velocities[i*2 + 1] * dtSec;
 		}
-		this.positionAttribute.needsUpdate = true;
 
 		// Retriangulate
 		// FIXME: Adapt Delaunay triangulation methods to work with TypedArray
@@ -126,14 +176,45 @@ class TriangleSim extends GenerativeSim {
 		}
 		var triangulation : Array<number> = Delaunay.triangulate( tri_input );
 
-		// Update index buffer
-		this.indexBuffer.set( triangulation );
-		var zeroFillLen = this.indexBuffer.length - triangulation.length;
-		if ( zeroFillLen > 0 ) {
-			var zeroFillBuf = new Uint16Array( zeroFillLen );
-			this.indexBuffer.set( zeroFillBuf, triangulation.length );
+		// Update vertex buffer
+		for ( var i = 0; i < this.maxNumVerts; ++i ) {
+			if ( i < triangulation.length ) {
+				var particleIdx = triangulation[i];
+				this.vertexBuffer[i*3 + 0] = this.positions[particleIdx*3 + 0];
+				this.vertexBuffer[i*3 + 1] = this.positions[particleIdx*3 + 1];
+				this.vertexBuffer[i*3 + 2] = this.positions[particleIdx*3 + 2];
+			} else {
+				this.vertexBuffer[i*3 + 0] = 0;
+				this.vertexBuffer[i*3 + 1] = 0;
+				this.vertexBuffer[i*3 + 2] = 0;
+			}
 		}
-		this.indexAttribute.needsUpdate = true;
+		this.positionAttribute.needsUpdate = true;
+
+		// Update per-tri centroids (WTB SIMD)
+		for ( var i = 0; i < triangulation.length; i += 3 ) {
+			var vertexA_X = this.vertexBuffer[i*3 + 0];
+			var vertexA_Y = this.vertexBuffer[i*3 + 1];
+		//	var vertexA_Z = this.vertexBuffer[i*3 + 2];
+			var vertexB_X = this.vertexBuffer[i*3 + 3];
+			var vertexB_Y = this.vertexBuffer[i*3 + 4];
+		//	var vertexB_Z = this.vertexBuffer[i*3 + 5];
+			var vertexC_X = this.vertexBuffer[i*3 + 6];
+			var vertexC_Y = this.vertexBuffer[i*3 + 7];
+		//	var vertexC_Z = this.vertexBuffer[i*3 + 8];
+
+			var centroidX = (vertexA_X + vertexB_X + vertexC_X) / 3;
+			var centroidY = (vertexA_Y + vertexB_Y + vertexC_Y) / 3;
+		//	var centroidZ = (vertexA_Z + vertexB_Z + vertexC_Z) / 3;
+
+			this.primCentroidBuffer[i*2 + 0] = centroidX;
+			this.primCentroidBuffer[i*2 + 1] = centroidY;
+			this.primCentroidBuffer[i*2 + 2] = centroidX;
+			this.primCentroidBuffer[i*2 + 3] = centroidY;
+			this.primCentroidBuffer[i*2 + 4] = centroidX;
+			this.primCentroidBuffer[i*2 + 5] = centroidY;
+		}
+		this.primCentroidAttribute.needsUpdate = true;
 	}
 }
 
@@ -143,7 +224,7 @@ class TriangleSim extends GenerativeSim {
 
 var g_sim : GenerativeSim;
 function main(): void {
-	g_sim = new TriangleSim();
+	g_sim = new TriangleSim( 100 );
 }
 
 main();

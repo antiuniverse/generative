@@ -26,6 +26,28 @@
     <script src="vendor/three.js"></script>
     <script src="vendor/delaunay.js"></script>
 
+    <script id="tri_vs" type="x-shader/x-vertex">
+        attribute vec2 primCentroid;
+
+        uniform vec2 viewportSize;
+
+        varying vec3 primitiveColor;
+
+        void main() {
+            vec2 normalizedPos = primCentroid.xy / viewportSize.xy;
+            primitiveColor = vec3( 0.0, normalizedPos.x, normalizedPos.y );
+
+            gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );
+        }
+    </script>
+
+    <script id="tri_fs" type="x-shader/x-fragment">
+        varying vec3 primitiveColor;
+        void main() {
+            gl_FragColor = vec4( primitiveColor, 1.0 );
+        }
+    </script>
+
     <script src="generative.js"></script>
 </body>
 </html>
