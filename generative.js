@@ -14,6 +14,7 @@ var GenerativeSim = (function () {
         this.nearClip = 0.1;
         this.farClip = 10000.0;
         this.lastRenderTimeMs = 0;
+        this.updateCount = 0;
         // Fat arrow closure to preserve 'this' context when reinvoked on subsequent frames
         this.animationFrameCallback = function (timestampMs) {
             var dtMs = timestampMs - _this.lastRenderTimeMs;
@@ -36,13 +37,14 @@ var GenerativeSim = (function () {
         // Create and attach renderer
         this.renderer = new THREE.WebGLRenderer();
         this.renderer.setSize(width, height);
-        this.renderer.setClearColor(0xffffff);
+        this.renderer.setClearColor(0x000000);
         containingElement.appendChild(this.renderer.domElement);
         // Bootstrap animation loop
         this.lastRenderTimeMs = window.performance.now();
         requestAnimationFrame(this.animationFrameCallback);
     }
     GenerativeSim.prototype.update = function (dtMs) {
+        ++this.updateCount;
     };
     GenerativeSim.prototype.render = function () {
         this.renderer.render(this.scene, this.camera);
@@ -55,8 +57,8 @@ var TriangleSim = (function (_super) {
     function TriangleSim(numParticles, containingElement) {
         if (containingElement === void 0) { containingElement = document.body; }
         _super.call(this, containingElement);
-        this.velocityMin = 5;
-        this.velocityMax = 30;
+        this.velocityMin = 25;
+        this.velocityMax = 50;
         this.numParticles = numParticles;
         this.camera = new THREE.OrthographicCamera(0, this.containerWidth, 0, this.containerHeight, this.nearClip, this.farClip);
         // Upper bound on faces in triangulation, per http://math.stackexchange.com/a/745166/127337
@@ -93,7 +95,10 @@ var TriangleSim = (function (_super) {
             },
             vertexShader: document.getElementById('tri_vs').textContent,
             fragmentShader: document.getElementById('tri_fs').textContent,
-            side: THREE.DoubleSide
+            side: THREE.DoubleSide,
+            blending: THREE.AdditiveBlending,
+            depthTest: false,
+            transparent: true
         });
         this.mesh = new THREE.Mesh(this.geometry, this.material);
         this.mesh.frustumCulled = false;
@@ -109,21 +114,40 @@ var TriangleSim = (function (_super) {
         this.camera.position.z = this.farClip * 0.5;
     }
     TriangleSim.prototype.update = function (dtMs) {
+        _super.prototype.update.call(this, dtMs);
         var dtSec = dtMs / 1000;
         for (var i = 0; i < this.numParticles; ++i) {
+            // Apply velocity
             this.positions[i * 3 + 0] += this.velocities[i * 2 + 0] * dtSec;
             this.positions[i * 3 + 1] += this.velocities[i * 2 + 1] * dtSec;
+            // Reflect X velocity at the container left/right edges
+            if (this.positions[i * 3 + 0] < 0 || this.positions[i * 3 + 0] > this.containerWidth) {
+                this.velocities[i * 2 + 0] *= -1;
+            }
+            // Reflect Y velocity at the container top/bottom edges
+            if (this.positions[i * 3 + 1] < 0 || this.positions[i * 3 + 1] > this.containerHeight) {
+                this.velocities[i * 2 + 1] *= -1;
+            }
         }
+        if (this.updateCount % 1800 == 1) {
+            this.UpdateTriangulation();
+        }
+        this.UpdateVertexBuffer();
+        this.UpdateCentroidBuffer();
+    };
+    TriangleSim.prototype.UpdateTriangulation = function () {
         // Retriangulate
         // FIXME: Adapt Delaunay triangulation methods to work with TypedArray
         var tri_input = new Array(this.numParticles);
         for (var i = 0; i < this.numParticles; ++i) {
             tri_input[i] = [this.positions[i * 3 + 0], this.positions[i * 3 + 1]];
         }
-        var triangulation = Delaunay.triangulate(tri_input);
+        this.triangulation = Delaunay.triangulate(tri_input);
+    };
+    TriangleSim.prototype.UpdateVertexBuffer = function () {
         for (var i = 0; i < this.maxNumVerts; ++i) {
-            if (i < triangulation.length) {
-                var particleIdx = triangulation[i];
+            if (i < this.triangulation.length) {
+                var particleIdx = this.triangulation[i];
                 this.vertexBuffer[i * 3 + 0] = this.positions[particleIdx * 3 + 0];
                 this.vertexBuffer[i * 3 + 1] = this.positions[particleIdx * 3 + 1];
                 this.vertexBuffer[i * 3 + 2] = this.positions[particleIdx * 3 + 2];
@@ -135,7 +159,9 @@ var TriangleSim = (function (_super) {
             }
         }
         this.positionAttribute.needsUpdate = true;
-        for (var i = 0; i < triangulation.length; i += 3) {
+    };
+    TriangleSim.prototype.UpdateCentroidBuffer = function () {
+        for (var i = 0; i < this.triangulation.length; i += 3) {
             var vertexA_X = this.vertexBuffer[i * 3 + 0];
             var vertexA_Y = this.vertexBuffer[i * 3 + 1];
             //	var vertexA_Z = this.vertexBuffer[i*3 + 2];
@@ -162,7 +188,7 @@ var TriangleSim = (function (_super) {
 ////////////////////////////////////////
 var g_sim;
 function main() {
-    g_sim = new TriangleSim(100);
+    g_sim = new TriangleSim(400);
 }
 main();
 //# sourceMappingURL=generative.js.map

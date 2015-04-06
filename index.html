@@ -35,7 +35,7 @@
 
         void main() {
             vec2 normalizedPos = primCentroid.xy / viewportSize.xy;
-            primitiveColor = vec3( 0.0, normalizedPos.x, normalizedPos.y );
+            primitiveColor = vec3( 0.25 + normalizedPos.x * 0.75, 0.25 + normalizedPos.y * 0.75, 1.0 );
 
             gl_Position = projectionMatrix * modelViewMatrix * vec4( position, 1.0 );
         }
@@ -44,7 +44,7 @@
     <script id="tri_fs" type="x-shader/x-fragment">
         varying vec3 primitiveColor;
         void main() {
-            gl_FragColor = vec4( primitiveColor, 1.0 );
+            gl_FragColor = vec4( primitiveColor * 0.25, 0.05 );
         }
     </script>
 
