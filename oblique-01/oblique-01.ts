@@ -2,6 +2,16 @@
 
 var gMath = Math;
 module THREE {
+	export function handleColorChange( color: THREE.Color ) {
+		return ( value: any ) => {
+			if ( typeof value === 'string' ) {
+				value = value.replace( '#', '0x' );
+			}
+
+			color.setHex( value );
+		}
+	}
+
 	export class ObliqueCamera extends OrthographicCamera {
 		public alpha: number;
 		public phi: number;
@@ -42,6 +52,8 @@ class ObliqueSim extends BaseSim {
 	protected material: THREE.Material;
 	protected mesh: THREE.Mesh;
 
+	protected meshColor;
+
 
 	constructor( containingElement: HTMLElement = document.body ) {
 		super( containingElement );
@@ -57,6 +69,8 @@ class ObliqueSim extends BaseSim {
 			side: THREE.DoubleSide,
 			transparent: true
 		} );
+
+		this.meshColor = this.material.color.getHex();
 
 		var loader = new THREE.OBJLoader();
 		loader.load( '../assets/cf-logo.obj', ( obj: THREE.Object3D ) => {
@@ -80,6 +94,7 @@ class ObliqueSim extends BaseSim {
 		this.scene.add( testMesh );
 
 		this.gui = new dat.GUI();
+		this.gui.addColor( this, 'meshColor' ).onChange( THREE.handleColorChange( this.material.color ) );
 		var guiProj = this.gui.addFolder( 'projection' );
 		guiProj.open();
 		guiProj.add( this.camera, 'alpha', -180, 180 );

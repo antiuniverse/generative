@@ -8,6 +8,15 @@ var __extends = this.__extends || function (d, b) {
 var gMath = Math;
 var THREE;
 (function (THREE) {
+    function handleColorChange(color) {
+        return function (value) {
+            if (typeof value === 'string') {
+                value = value.replace('#', '0x');
+            }
+            color.setHex(value);
+        };
+    }
+    THREE.handleColorChange = handleColorChange;
     var ObliqueCamera = (function (_super) {
         __extends(ObliqueCamera, _super);
         function ObliqueCamera(left, right, top, bottom, near, far, alpha, phi) {
@@ -65,6 +74,7 @@ var ObliqueSim = (function (_super) {
             side: THREE.DoubleSide,
             transparent: true
         });
+        this.meshColor = this.material.color.getHex();
         var loader = new THREE.OBJLoader();
         loader.load('../assets/cf-logo.obj', function (obj) {
             _this.mesh = (obj.children[0]);
@@ -83,6 +93,7 @@ var ObliqueSim = (function (_super) {
         testMesh.scale.set(200, 200, 200);
         this.scene.add(testMesh);
         this.gui = new dat.GUI();
+        this.gui.addColor(this, 'meshColor').onChange(THREE.handleColorChange(this.material.color));
         var guiProj = this.gui.addFolder('projection');
         guiProj.open();
         guiProj.add(this.camera, 'alpha', -180, 180);
