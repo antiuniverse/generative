@@ -18,6 +18,9 @@
         <TypeScriptCodeStyleSettings>
           <option name="SPACE_AFTER_TYPE_COLON" value="true" />
         </TypeScriptCodeStyleSettings>
+        <XML>
+          <option name="XML_LEGACY_SETTINGS_IMPORTED" value="true" />
+        </XML>
         <codeStyleSettings language="TypeScript">
           <option name="SPACE_WITHIN_METHOD_CALL_PARENTHESES" value="true" />
           <option name="SPACE_WITHIN_METHOD_PARENTHESES" value="true" />
