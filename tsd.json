@@ -16,6 +16,9 @@
     },
     "webrtc/MediaStream.d.ts": {
       "commit": "32bb5fea1c1a00a0f4d44523b75849fe60e97bee"
+    },
+    "dat-gui/dat-gui.d.ts": {
+      "commit": "b0056383b51495b373a32b791de8112fcafe2ace"
     }
   }
 }

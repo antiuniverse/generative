@@ -15,6 +15,7 @@
             <option name="USE_RELATIVE_INDENTS" value="false" />
           </value>
         </option>
+        <option name="LINE_SEPARATOR" value="&#10;" />
         <TypeScriptCodeStyleSettings>
           <option name="SPACE_AFTER_TYPE_COLON" value="true" />
         </TypeScriptCodeStyleSettings>

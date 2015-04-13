@@ -21,15 +21,15 @@ module THREE {
 			super.updateProjectionMatrix();
 
 			var L = 1.0 / gMath.tan( THREE.Math.degToRad( this.phi ) )
-			var cos = gMath.cos( THREE.Math.degToRad( this.alpha ) );
-			var sin = gMath.sin( THREE.Math.degToRad( this.alpha ) );
+			var cosA = gMath.cos( THREE.Math.degToRad( this.alpha ) );
+			var sinA = gMath.sin( THREE.Math.degToRad( this.alpha ) );
 
 			var obliqueShear = new THREE.Matrix4();
 			var m = obliqueShear.elements;
-			m[0] =  1.0;    m[4] =  0.0;    m[ 8] = L*cos;    m[12] =  0.0;
-			m[1] =  0.0;    m[5] =  1.0;    m[ 9] = L*sin;    m[13] =  0.0;
-			m[2] =  0.0;    m[6] =  0.0;    m[10] =   1.0;    m[14] =  0.0;
-			m[3] =  0.0;    m[7] =  0.0;    m[11] =   0.0;    m[15] =  1.0;
+			m[0] = 1.0;    m[4] = 0.0;    m[ 8] = L*cosA;    m[12] = 0.0;
+			m[1] = 0.0;    m[5] = 1.0;    m[ 9] = L*sinA;    m[13] = 0.0;
+			m[2] = 0.0;    m[6] = 0.0;    m[10] =    1.0;    m[14] = 0.0;
+			m[3] = 0.0;    m[7] = 0.0;    m[11] =    0.0;    m[15] = 1.0;
 
 			this.projectionMatrix.multiplyMatrices( this.projectionMatrix, obliqueShear );
 		}
@@ -37,6 +37,8 @@ module THREE {
 }
 
 class ObliqueSim extends BaseSim {
+	protected gui: dat.GUI;
+
 	protected material: THREE.Material;
 	protected mesh: THREE.Mesh;
 
@@ -45,11 +47,12 @@ class ObliqueSim extends BaseSim {
 		super( containingElement );
 
 		this.camera = new THREE.ObliqueCamera( 0, this.containerWidth, 0, this.containerHeight, 0.1, 2000.0, -45, 45.0 );
-		this.camera.position.z = 200;
+		this.camera.position.z = 200.1;
 
 		this.material = new THREE.MeshBasicMaterial( {
 			blending: THREE.AdditiveBlending,
 			color: 0x00ccff,
+			depthTest: false,
 			opacity: 0.5,
 			side: THREE.DoubleSide,
 			transparent: true
@@ -60,8 +63,9 @@ class ObliqueSim extends BaseSim {
 			this.mesh = <THREE.Mesh>( obj.children[0] );
 
 			this.mesh.material = this.material;
-			this.mesh.position.x = this.containerWidth / 2 + 150;
-			this.mesh.position.y = this.containerHeight / 2 - 150;
+			this.mesh.position.x = this.containerWidth / 2;
+			this.mesh.position.y = this.containerHeight / 2;
+			this.mesh.position.z = 100;
 			this.mesh.scale.set( 200, 200, 200 );
 
 			this.scene.add( this.mesh );
@@ -69,10 +73,17 @@ class ObliqueSim extends BaseSim {
 
 		var testCube = new THREE.BoxGeometry( 1, 1, 1 );
 		var testMesh = new THREE.Mesh( testCube, new THREE.MeshBasicMaterial( { color: 0x00ff00, wireframe: true } ) );
-		testMesh.position.x = this.containerWidth / 2 + 150;
-		testMesh.position.y = this.containerHeight / 2 - 150;
+		testMesh.position.x = this.containerWidth / 2;
+		testMesh.position.y = this.containerHeight / 2;
+		testMesh.position.z = 100;
 		testMesh.scale.set( 200, 200, 200 );
 		this.scene.add( testMesh );
+
+		this.gui = new dat.GUI();
+		var guiProj = this.gui.addFolder( 'projection' );
+		guiProj.open();
+		guiProj.add( this.camera, 'alpha', -180, 180 );
+		guiProj.add( this.camera, 'phi', 1, 90 );
 	}
 
 
@@ -80,6 +91,7 @@ class ObliqueSim extends BaseSim {
 		super.update( dtMs );
 
 		var dtSec = dtMs / 1000;
+		(<THREE.ObliqueCamera>(this.camera)).updateProjectionMatrix();
 	}
 }
 
